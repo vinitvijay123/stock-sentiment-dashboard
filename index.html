@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Stock Sentiment Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --font-mono: 'Space Mono', monospace;
+    --font-display: 'DM Serif Display', serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .logo-tag {
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: 2.2rem;
+    color: #fff;
+    line-height: 1;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.3);
+    padding: 8px 16px;
+    border-radius: 40px;
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+
+  /* Market summary bar */
+  .market-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 36px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .market-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 18px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: border-color 0.2s;
+  }
+
+  .market-pill:hover { border-color: var(--accent); }
+  .market-pill .name { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+  .market-pill .price { font-size: 14px; color: #fff; font-weight: 700; }
+  .market-pill .change { font-size: 12px; }
+  .market-pill .change.up { color: var(--green); }
+  .market-pill .change.down { color: var(--red); }
+
+  /* Search */
+  .search-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0 16px;
+    transition: border-color 0.2s;
+  }
+
+  .search-box:focus-within { border-color: var(--accent); }
+  .search-box span { color: var(--muted); font-size: 14px; }
+
+  .search-box input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 14px 0;
+  }
+
+  .search-box input::placeholder { color: var(--muted); }
+
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,212,255,0.05);
+  }
+
+  /* Stock grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card.buy::before { background: var(--green); }
+  .card.hold::before { background: var(--yellow); }
+  .card.sell::before { background: var(--red); }
+
+  .card:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  }
+  .card:hover::before { opacity: 1; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  .ticker-block .ticker {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .ticker-block .company {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+  }
+
+  .exchange-tag {
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+    font-weight: 700;
+  }
+
+  .exchange-tag.asx { background: rgba(124,58,237,0.2); color: #a78bfa; }
+  .exchange-tag.us  { background: rgba(0,212,255,0.1); color: var(--accent); }
+
+  /* Price row */
+  .price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .price-row .price { font-size: 22px; font-weight: 700; color: #fff; }
+  .price-row .change { font-size: 13px; }
+
+  /* Mini chart */
+  .mini-chart {
+    height: 48px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .mini-chart svg { width: 100%; height: 100%; }
+
+  /* Sentiment */
+  .sentiment-section {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+
+  .sentiment-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .sentiment-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .sent-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .sent-name { width: 60px; color: var(--muted); }
+
+  .sent-bar-bg {
+    flex: 1;
+    height: 5px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .sent-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s ease;
+  }
+
+  .sent-bar.pos { background: var(--green); }
+  .sent-bar.neu { background: var(--yellow); }
+  .sent-bar.neg { background: var(--red); }
+
+  .sent-pct { width: 32px; text-align: right; color: var(--text); }
+
+  /* Signal badge */
+  .signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+
+  .signal.buy  { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+  .signal.hold { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+  .signal.sell { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+  .signal-icon { font-size: 13px; }
+
+  /* Headlines */
+  .headlines {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .headline {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 5px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+
+  .hl-dot { margin-top: 4px; flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; }
+  .hl-dot.pos { background: var(--green); }
+  .hl-dot.neu { background: var(--yellow); }
+  .hl-dot.neg { background: var(--red); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 24px 0;
+    border-top: 1px solid var(--border);
+    line-height: 1.8;
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* Code block */
+  .code-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 40px;
+  }
+
+  .code-section h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  pre {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #a5b4fc;
+    overflow-x: auto;
+    line-height: 1.7;
+    white-space: pre;
+  }
+
+  .cm { color: var(--muted); }
+  .ck { color: #f472b6; }
+  .cs { color: #86efac; }
+  .cn { color: #fbbf24; }
+
+  /* Responsive */
+  @media(max-width: 600px) {
+    h1 { font-size: 1.6rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <span class="logo-tag">// AI Finance Project</span>
+      <h1>Sentiment<span>AI</span></h1>
+      <span style="font-size:11px;color:var(--muted);margin-top:4px;">ASX + S&P 500 · News Analysis · AI Signals</span>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div> LIVE DEMO</div>
+  </header>
+
+  <!-- Market bar -->
+  <div class="market-bar" id="marketBar"></div>
+
+  <!-- Search & filters -->
+  <div class="search-row">
+    <div class="search-box">
+      <span>⌕</span>
+      <input type="text" id="searchInput" placeholder="Search ticker or company..." oninput="filterCards()"/>
+    </div>
+    <button class="filter-btn active" onclick="setFilter('all', this)">ALL</button>
+    <button class="filter-btn" onclick="setFilter('asx', this)">ASX</button>
+    <button class="filter-btn" onclick="setFilter('us', this)">S&amp;P 500</button>
+    <button class="filter-btn" onclick="setFilter('buy', this)">BUY</button>
+    <button class="filter-btn" onclick="setFilter('sell', this)">SELL</button>
+  </div>
+
+  <!-- Stock grid -->
+  <div class="grid" id="stockGrid"></div>
+
+  <!-- Code snippet -->
+  <div class="code-section">
+    <h3>// STARTER CODE — plug in your API keys to go live</h3>
+    <pre><span class="cm"># stock_sentiment.py — Your project starter</span>
+<span class="cm"># pip install yfinance requests streamlit</span>
+
+<span class="ck">import</span> yfinance <span class="ck">as</span> yf
+<span class="ck">import</span> requests
+<span class="ck">import</span> streamlit <span class="ck">as</span> st
+<span class="ck">from</span> anthropic <span class="ck">import</span> Anthropic
+
+client = Anthropic()  <span class="cm"># uses ANTHROPIC_API_KEY env variable</span>
+
+<span class="ck">def</span> <span class="cn">get_stock_data</span>(ticker):
+    stock = yf.Ticker(ticker)
+    hist = stock.history(period=<span class="cs">"1mo"</span>)
+    <span class="ck">return</span> hist[<span class="cs">"Close"</span>].tolist(), hist[<span class="cs">"Close"</span>].iloc[-<span class="cn">1</span>]
+
+<span class="ck">def</span> <span class="cn">get_headlines</span>(ticker):
+    <span class="cm"># NewsAPI.org — free tier, 100 req/day</span>
+    url = <span class="cs">f"https://newsapi.org/v2/everything?q={ticker}&apiKey=YOUR_KEY"</span>
+    r = requests.get(url).json()
+    <span class="ck">return</span> [a[<span class="cs">"title"</span>] <span class="ck">for</span> a <span class="ck">in</span> r[<span class="cs">"articles"</span>][:<span class="cn">5</span>]]
+
+<span class="ck">def</span> <span class="cn">analyse_sentiment</span>(headlines):
+    <span class="cm"># Claude API scores each headline</span>
+    prompt = <span class="cs">f"""Analyse sentiment of these stock headlines.
+Return JSON: {{"positive": 0-100, "neutral": 0-100, "negative": 0-100, "signal": "BUY/HOLD/SELL"}}
+Headlines: {headlines}"""</span>
+    msg = client.messages.create(
+        model=<span class="cs">"claude-sonnet-4-20250514"</span>,
+        max_tokens=<span class="cn">200</span>,
+        messages=[{<span class="cs">"role"</span>: <span class="cs">"user"</span>, <span class="cs">"content"</span>: prompt}]
+    )
+    <span class="ck">return</span> msg.content[<span class="cn">0</span>].text
+
+<span class="cm"># Streamlit UI</span>
+st.title(<span class="cs">"📈 AI Stock Sentiment Dashboard"</span>)
+ticker = st.text_input(<span class="cs">"Enter ticker (e.g. BHP.AX or AAPL)"</span>)
+<span class="ck">if</span> ticker:
+    prices, current = get_stock_data(ticker)
+    headlines = get_headlines(ticker)
+    sentiment = analyse_sentiment(headlines)
+    st.line_chart(prices)
+    st.json(sentiment)</pre>
+  </div>
+
+  <footer>
+    Built by <strong style="color:var(--text)">Vinit Vijayakumar</strong> · Macquarie University · Economics &amp; Commerce<br/>
+    <span style="font-size:10px">Demo uses simulated data. Real version connects to yfinance + NewsAPI + Claude API.</span><br/>
+    <a href="https://linkedin.com/in/vinitvijayakumar-a78910341">LinkedIn</a> · <a href="#">GitHub</a> · <a href="#">Deploy on Streamlit Cloud</a>
+  </footer>
+
+</div>
+
+<script>
+const stocks = [
+  {
+    ticker: "BHP.AX", company: "BHP Group", exchange: "asx",
+    price: 44.82, change: +1.3, currency: "A$",
+    pos: 62, neu: 24, neg: 14, signal: "buy",
+    prices: [41,42,41.5,43,43.5,44,43.8,44.5,44.2,45,44.8,44.82],
+    headlines: [
+      { text: "BHP iron ore output beats quarterly estimates", s: "pos" },
+      { text: "China stimulus boosts mining sector outlook", s: "pos" },
+      { text: "BHP maintains dividend amid commodity volatility", s: "neu" }
+    ]
+  },
+  {
+    ticker: "CBA.AX", company: "Commonwealth Bank", exchange: "asx",
+    price: 134.10, change: -0.4, currency: "A$",
+    pos: 38, neu: 42, neg: 20, signal: "hold",
+    prices: [130,132,131,133,134,133.5,134,134.5,134,133.8,134.1,134.1],
+    headlines: [
+      { text: "CBA net interest margin under pressure from rate cuts", s: "neg" },
+      { text: "Home loan growth remains steady in Q3", s: "neu" },
+      { text: "CBA digital banking customers reach record high", s: "pos" }
+    ]
+  },
+  {
+    ticker: "AAPL", company: "Apple Inc.", exchange: "us",
+    price: 227.48, change: +0.9, currency: "$",
+    pos: 70, neu: 20, neg: 10, signal: "buy",
+    prices: [215,218,220,222,221,224,225,226,225.5,227,226.8,227.48],
+    headlines: [
+      { text: "Apple Vision Pro 2 leaks suggest major upgrade", s: "pos" },
+      { text: "iPhone 17 pre-orders projected to exceed last year", s: "pos" },
+      { text: "Apple Services revenue hits new quarterly record", s: "pos" }
+    ]
+  },
+  {
+    ticker: "TSLA", company: "Tesla Inc.", exchange: "us",
+    price: 178.20, change: -2.1, currency: "$",
+    pos: 22, neu: 28, neg: 50, signal: "sell",
+    prices: [210,205,200,195,192,188,185,182,180,179,178.5,178.2],
+    headlines: [
+      { text: "Tesla misses Q1 delivery estimates by wide margin", s: "neg" },
+      { text: "Price cuts accelerate margin compression concerns", s: "neg" },
+      { text: "Analyst downgrades Tesla on competitive pressure", s: "neg" }
+    ]
+  },
+  {
+    ticker: "WES.AX", company: "Wesfarmers Ltd", exchange: "asx",
+    price: 72.30, change: +0.6, currency: "A$",
+    pos: 55, neu: 30, neg: 15, signal: "buy",
+    prices: [68,69,70,69.5,70.5,71,71.5,71,72,72.1,72.2,72.3],
+    headlines: [
+      { text: "Bunnings delivers strong autumn trading update", s: "pos" },
+      { text: "Wesfarmers lithium project advances on schedule", s: "pos" },
+      { text: "Retail spending softens amid cost of living pressure", s: "neu" }
+    ]
+  },
+  {
+    ticker: "MSFT", company: "Microsoft Corp.", exchange: "us",
+    price: 415.60, change: +1.5, currency: "$",
+    pos: 75, neu: 18, neg: 7, signal: "buy",
+    prices: [390,395,400,405,403,408,410,412,413,414,415,415.6],
+    headlines: [
+      { text: "Azure cloud revenue growth accelerates to 33%", s: "pos" },
+      { text: "Copilot AI integration driving enterprise upgrades", s: "pos" },
+      { text: "Microsoft beats earnings estimates across all segments", s: "pos" }
+    ]
+  }
+];
+
+const marketData = [
+  { name: "ASX 200", price: "8,142", change: "+0.4%", up: true },
+  { name: "S&P 500", price: "5,623", change: "+0.7%", up: true },
+  { name: "NASDAQ", price: "17,891", change: "+1.1%", up: true },
+  { name: "AUD/USD", price: "0.6541", change: "-0.2%", up: false },
+  { name: "BTC/USD", price: "82,340", change: "+2.3%", up: true },
+];
+
+let activeFilter = 'all';
+
+function renderMarketBar() {
+  const bar = document.getElementById('marketBar');
+  bar.innerHTML = marketData.map(m => `
+    <div class="market-pill">
+      <div>
+        <div class="name">${m.name}</div>
+        <div class="price">${m.price}</div>
+      </div>
+      <div class="change ${m.up ? 'up' : 'down'}">${m.change}</div>
+    </div>
+  `).join('');
+}
+
+function makePath(prices) {
+  const w = 280, h = 48;
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const range = max - min || 1;
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * w;
+    const y = h - ((p - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  });
+  const isUp = prices[prices.length-1] >= prices[0];
+  const color = isUp ? '#10b981' : '#ef4444';
+  const fill = isUp ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+  const area = `M${pts[0]} ` + pts.slice(1).map(p => `L${p}`).join(' ') + ` L${w},${h} L0,${h} Z`;
+  const line = `M${pts[0]} ` + pts.slice(1).map(p => `L${p}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <path d="${area}" fill="${fill}"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function signalIcon(s) {
+  return s === 'buy' ? '▲' : s === 'sell' ? '▼' : '◆';
+}
+
+function renderCard(stock, delay) {
+  const chgColor = stock.change >= 0 ? 'var(--green)' : 'var(--red)';
+  const chgSign = stock.change >= 0 ? '+' : '';
+  return `
+    <div class="card ${stock.signal}" style="animation-delay:${delay}ms"
+         data-ticker="${stock.ticker}" data-exchange="${stock.exchange}" data-signal="${stock.signal}">
+      <div class="card-header">
+        <div class="ticker-block">
+          <div class="ticker">${stock.ticker}</div>
+          <div class="company">${stock.company}</div>
+        </div>
+        <span class="exchange-tag ${stock.exchange}">${stock.exchange.toUpperCase()}</span>
+      </div>
+
+      <div class="price-row">
+        <span class="price">${stock.currency}${stock.price.toFixed(2)}</span>
+        <span class="change" style="color:${chgColor}">${chgSign}${stock.change}%</span>
+      </div>
+
+      <div class="mini-chart">${makePath(stock.prices)}</div>
+
+      <div class="sentiment-section">
+        <div class="sentiment-label">AI SENTIMENT ANALYSIS</div>
+        <div class="sentiment-bars">
+          <div class="sent-row">
+            <span class="sent-name">Positive</span>
+            <div class="sent-bar-bg"><div class="sent-bar pos" style="width:${stock.pos}%"></div></div>
+            <span class="sent-pct">${stock.pos}%</span>
+          </div>
+          <div class="sent-row">
+            <span class="sent-name">Neutral</span>
+            <div class="sent-bar-bg"><div class="sent-bar neu" style="width:${stock.neu}%"></div></div>
+            <span class="sent-pct">${stock.neu}%</span>
+          </div>
+          <div class="sent-row">
+            <span class="sent-name">Negative</span>
+            <div class="sent-bar-bg"><div class="sent-bar neg" style="width:${stock.neg}%"></div></div>
+            <span class="sent-pct">${stock.neg}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span class="signal ${stock.signal}">
+          <span class="signal-icon">${signalIcon(stock.signal)}</span>
+          ${stock.signal.toUpperCase()}
+        </span>
+        <span style="font-size:10px;color:var(--muted)">Based on ${stock.headlines.length} headlines</span>
+      </div>
+
+      <div class="headlines">
+        ${stock.headlines.map(h => `
+          <div class="headline">
+            <div class="hl-dot ${h.s}"></div>
+            <span>${h.text}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderGrid(filtered) {
+  const grid = document.getElementById('stockGrid');
+  grid.innerHTML = filtered.map((s, i) => renderCard(s, i * 60)).join('');
+}
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterCards();
+}
+
+function filterCards() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = stocks.filter(s => {
+    const matchSearch = !q || s.ticker.toLowerCase().includes(q) || s.company.toLowerCase().includes(q);
+    const matchFilter = activeFilter === 'all' ||
+      (activeFilter === 'asx' && s.exchange === 'asx') ||
+      (activeFilter === 'us' && s.exchange === 'us') ||
+      (activeFilter === 'buy' && s.signal === 'buy') ||
+      (activeFilter === 'sell' && s.signal === 'sell');
+    return matchSearch && matchFilter;
+  });
+  renderGrid(filtered);
+}
+
+renderMarketBar();
+renderGrid(stocks);
+</script>
+</body>
+</html>
